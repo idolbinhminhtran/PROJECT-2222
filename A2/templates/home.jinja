@@ -1,0 +1,344 @@
+<!-- 
+    Here you'll find the main exhibit: the chat application code. Feel free to look around!
+-->
+{% extends 'base.jinja' %}
+
+
+{% block content %} 
+   <style>
+    nav {
+        border-bottom: 1px solid black;
+        overflow: auto
+    }
+
+    #message_box {
+        border: 1px solid black; 
+        height: 400px; 
+        width: 800px; 
+        overflow: auto;
+        padding: 2px;
+    }
+
+    .text  {
+        margin-top: 2px;
+        margin-bottom: 2px;
+    }
+
+</style>
+
+<!--Navbar, you'll see the username here-->
+<nav style="border-bottom: 1px solid black;">
+    <ol style="float: right">
+        <li style="display:inline-block">Username:  {{ username }} </li>
+    </ol>
+</nav>
+
+<h1>Messaging App </h1>
+
+<main>
+    <!-- The messages are displayed here -->
+    <section id="message_box"></section>
+
+    <!-- These part ideally should be a form element, 
+    but I wrote this code a year ago and I don't want to break anything...-->
+    <section id="chat_box">
+        <p class="text">Chat with: </p>
+        <input id="receiver" placeholder="username">
+        <!-- MDN says its bad practice to use the onclick attribute,
+        but we're using it anyways coz its easy :)-->
+        <button onclick="join_room()">Chat</button>
+    </section>
+
+    <!-- The (message) input box is set to display: none initially, 
+    this means the input box is "invisible" initially-->
+    <section id="input_box" style="display: none" >
+        <p class="text">Message: </p>
+        <input id="message" placeholder="message">
+        <button onclick="send()">Send</button>
+        <button onclick="leave()">Leave Room</button>
+    </section>
+
+    <section id="addfriend_box">
+        <p class="text">Send request to: </p>
+        <input id="addfriend" placeholder="username">
+        <button onclick="sendFriendRequest()">Send</button>
+    </section>
+
+    <section id="friend_box">
+        <p class="text">Friend List: </p>
+        <button onclick="showFriendList()">Show</button>
+        <button onclick="hideFriendList()">Hide</button>
+        <ul id="friendList"></ul>
+    </section>
+
+    <section id="invitation sented:">
+        <p class="text">Invitation sented: </p>
+        <button onclick="showInvitationSented()">Show</button>
+        <button onclick="hideInvitationSented()">Hide</button>
+        <ul id="invitation sented list"></ul>
+    </section>
+
+    <section id="invitation received:">
+        <p class="text">Invitation received: </p>
+        <button onclick="showInvitationReceived()">Show</button>
+        <button onclick="hideInvitationReceived()">Hide</button>
+        <ul id="invitation received list"></ul>
+    </section>
+
+
+
+
+
+</main>
+
+<script src="/static/js/libs/socket.io.min.js"></script>
+<script>
+    let room_id = 0;
+
+    // when the user presses the "Enter" key inside of the "message box", 
+    // the message is sent to the server
+    $("#message").on("keyup", (e) => {
+        if (e.key == "Enter") {
+            send();
+        }
+    })
+
+    // when the user presses the enter key inside of the "receiver box"
+    // the user joins a (socket) room
+     $("#receiver").on("keyup", (e) => {
+        if (e.key == "Enter") {
+            join_room();
+        }
+    })
+
+
+    $(document).ready(() => {
+        // room_id is undefined if the user hasn't joined a room
+        // we early return in this case
+        if (Cookies.get("room_id") == undefined) {
+            return;
+        }
+
+        // the user has already joined an existing room
+        // we'll display the message box, instead of the "Chat with: " box
+        $("#chat_box").hide();
+        $("#input_box").show();
+        $("#friend_box").show();
+        $("#friendList").show();
+        room_id = parseInt(Cookies.get("room_id"));
+    })
+    
+    // Here's the Socket IO part of the code
+    // things get a bit complicated here so brace yourselves :P
+    let username = "{{ username }}";
+
+    Cookies.set('username', username);
+
+    // initializes the socket
+    const socket = io();
+
+    // an incoming message arrives, we'll add the message to the message box
+    socket.on("incoming", (msg, color="black") => {
+        add_message(msg, color);
+    })
+    
+    // we'll send the message to the server by emitting a "send" event
+    function send() {
+        let message = $("#message").val();
+        $("#message").val("");
+        socket.emit("send", username, message, room_id);  
+    } 
+
+    // we emit a join room event to the server to join a room
+    function join_room() {
+       
+        let receiver = $("#receiver").val();
+        $("#receiver").val("");
+        
+        // pass in the receiver of our message to the server
+        // as well as the current user's username
+        socket.emit("join", username, receiver, (res) => {
+            // res is a string with the error message if the error occurs
+            // this is a pretty bad way of doing error handling, but watevs
+            if (typeof res != "number") {
+                alert(res);
+                return;
+            }
+
+            // set the room id variable to the room id returned by the server
+            room_id = res;
+            Cookies.set("room_id", room_id);
+
+            // now we'll show the input box, so the user can input their message
+            $("#chat_box").hide();
+            $("#input_box").show();
+        });
+     
+    }
+
+    function join_room_with(receiver) {
+        
+        // pass in the receiver of our message to the server
+        // as well as the current user's username
+        socket.emit("join", username, receiver, (res) => {
+            // res is a string with the error message if the error occurs
+            // this is a pretty bad way of doing error handling, but watevs
+            if (typeof res != "number") {
+                alert(res);
+                return;
+            }
+
+            // set the room id variable to the room id returned by the server
+            room_id = res;
+            Cookies.set("room_id", room_id);
+
+            // now we'll show the input box, so the user can input their message
+            $("#chat_box").hide();
+            $("#input_box").show();
+        });
+     
+    }
+
+    // function when the user clicks on "Leave Room"
+    // emits a "leave" event, telling the server that we want to leave the room
+    function leave() {
+        Cookies.remove("room_id");
+        socket.emit("leave", username, room_id);
+        $("#input_box").hide();
+        $("#chat_box").show();
+    }
+
+    // function to add a message to the message box
+    // called when an incoming message has reached a client
+    function add_message(message, color) {
+        let box = $("#message_box");
+        let child = $(`<p style="color:${color}; margin: 0px;"></p>`).text(message);
+        box.append(child);
+    }
+
+    function sendFriendRequest(){
+        let friendName = $("#addfriend").val();
+        $("#addfriend").val("");
+
+        if(friendName)
+        {
+            socket.emit("send friend request", username, friendName, (response) => {
+                if (response == "Unknown receiver")
+                {
+                    alert("User name does not exist");
+                }
+            });
+        }
+        else
+        {
+            alert("Please enter a username");
+        }
+    }
+    
+    function showFriendList()
+    {
+        socket.emit("show friend list", username, (friend_list) => {
+            const friendListUL = document.getElementById("friendList");
+            friendListUL.style.display = '';
+            friendListUL.innerHTML = '';
+            friend_list.forEach(element => {
+                const li = document.createElement("li");
+                li.textContent = element;
+
+                const chatBtn = document.createElement("button");
+                chatBtn.textContent = "Chat";
+                chatBtn.onclick = function() {
+                    join_room_with(element);
+                    };
+                li.appendChild(chatBtn);
+
+                friendListUL.appendChild(li);
+                
+            });
+        })
+    }
+
+    function hideFriendList()
+    {
+        const friendListUL = document.getElementById("friendList");
+        if(friendListUL)
+        {
+            friendListUL.style.display = 'none';
+        }
+    }
+
+    function showInvitationSented()
+    {
+        socket.emit("show invitation sented", username, (friend_list) => {
+            const invitationSentedUL = document.getElementById("invitation sented list");
+            invitationSentedUL.style.display = '';
+            invitationSentedUL.innerHTML = '';
+            friend_list.forEach(element => {
+                const li = document.createElement("li");
+                li.textContent = element;
+                invitationSentedUL.appendChild(li);
+                
+            });
+        })
+    }
+
+    function hideInvitationSented()
+    {
+        const invitationSentedUL = document.getElementById("invitation sented list");
+        if(invitationSentedUL)
+        {
+            invitationSentedUL.style.display = 'none';
+        }
+    }
+
+    function showInvitationReceived()
+    {
+        socket.emit("show invitation received", username, (friend_list) => {
+            const invitationReceivedUL = document.getElementById("invitation received list");
+            invitationReceivedUL.style.display = '';
+            invitationReceivedUL.innerHTML = '';
+            friend_list.forEach(element => {
+                const li = document.createElement("li");
+                li.textContent = element + " ";
+                const acceptBtn = document.createElement("button");
+                acceptBtn.textContent = "Accept";
+                acceptBtn.onclick = function() {
+                    acceptFriendRequest(element);
+                    li.style.display = 'none';
+                    };
+                li.appendChild(acceptBtn);
+
+                const declineBtn = document.createElement("button");
+                declineBtn.textContent = "Decline";
+                declineBtn.onclick = function() {
+                    declineFriendRequest(element);
+                    li.style.display = 'none';
+                    };
+                li.appendChild(declineBtn);
+                invitationReceivedUL.appendChild(li);
+            });
+        })   
+    }
+
+    function hideInvitationReceived()
+    {
+        const invitationReceivedUL = document.getElementById("invitation received list");
+        if(invitationReceivedUL)
+        {
+            invitationReceivedUL.style.display = 'none';
+        }
+    }
+
+    function acceptFriendRequest(friendName)
+    {
+        socket.emit("accept friend request", username, friendName);
+    }
+
+    function declineFriendRequest(friendName)
+    {
+        socket.emit("decline friend request", username, friendName);
+
+    }
+    
+</script>
+{% endblock %}

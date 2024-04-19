@@ -1,0 +1,65 @@
+<!-- 
+Sign up page, pretty much the same as login.
+-->
+{% extends 'base.jinja' %}
+
+
+{% block content %} 
+    <h1>Sign Up</h1>
+    <p>Username</p>
+    <input id="username"/>
+    <p>Password</p>
+    <input id="password" type="password"/>
+    <button onclick="signup()">Sign up</button>
+
+    <script>
+         function isValidURL(string) {
+            if (string.length == 0) {
+                return false;
+            }
+            if (string[0] == "/") {
+                return true;
+            }
+            return false;
+        }
+
+        async function generateSalt(length = 16) 
+        {
+            const array = new Uint8Array(length);
+            window.crypto.getRandomValues(array);
+            return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+        }
+
+        async function hashing(password, salt)
+        {
+            const combined = password + salt;
+            const encoder = new TextEncoder();
+            const encodedData = encoder.encode(combined);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', encodedData);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+            return hashHex;
+        }
+        // this function is identical to login(), see login.jinja
+        async function signup() {
+            let loginURL = "{{ url_for('signup_user') }}";
+            const username = $("#username").val();
+            const password = $("#password").val();
+            const salt = await generateSalt();
+            const hashed_password = await hashing(password, salt);
+            console.log(username);
+            console.log(hashed_password);
+            console.log(salt)
+            let res = await axios.post(loginURL, {
+                username: username,
+                password: hashed_password,
+                salt: salt
+            })
+            if (!isValidURL(res.data)) {
+                alert(res.data);
+                return;
+            }
+            window.open(res.data, "_self")
+        }
+    </script>
+{% endblock %}
